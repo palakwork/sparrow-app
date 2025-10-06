@@ -32,6 +32,8 @@
     Request as RequestType,
   } from "@sparrow/common/interfaces/request.interface";
   import { onDestroy, onMount, tick } from "svelte";
+  import { Loader } from "@sparrow/library/ui";
+
   import {
     AddRegular,
     AngleLeftIcon,
@@ -210,6 +212,20 @@
     }
   });
 
+  $: {
+    if (activeWorkspace?._id) {
+      const filteredCollections = rawCollection
+        .map((value) => value.toMutableJSON())
+        ?.filter(
+          (value) =>
+            value.workspaceId === activeWorkspace?._id &&
+            !(value?.activeSync && activeWorkspace?.isShared),
+        );
+
+      collectionListDocument = filteredCollections;
+    }
+  }
+
   const debouncedSearchCollection = new Debounce().debounce(
     async (_search = "", _collections = []) => {
       collectionFilter = searchCollection(_search, _collections);
@@ -308,12 +324,28 @@
     }
   }
 
+  let isLoading = true;
+
+  onMount(() => {
+    isLoading = true;
+  });
+
   const collectionListSubscriber = collectionList.subscribe(async (value) => {
     if (value) {
       rawCollection = value;
     }
   });
 
+  $: {
+    if (
+      typeof rawCollection !== "undefined" &&
+      typeof collectionListDocument !== "undefined"
+    ) {
+      isLoading = false;
+    } else {
+      isLoading = true;
+    }
+  }
   type FlatItem = {
     id: string;
     name: string;
@@ -533,106 +565,91 @@
   />
 {/if}
 
-<div
-  style="height:100%; overflow:hidden"
-  class={`sidebar d-flex flex-column  scroll px-1`}
-  id="collection-container"
->
+{#if isLoading}
   <div
-    class="d-flex justify-content-between align-items-center align-self-stretch px-0 pt-3 d-none"
+    class="spinner d-flex align-items-center justify-content-center"
+    style="height: 100%; width: 100%;"
   >
-    <p class="mb-0 text-whiteColor ellipsis text-fs-16">
-      {$currentWorkspace?.name || ""}
-    </p>
-    <button
-      class=" border-0 rounded px-2 angleButton"
-      on:click={() => {
-        leftPanelController.leftPanelCollapse =
-          !leftPanelController.leftPanelCollapse;
-        leftPanelController.handleCollapseCollectionList();
-      }}
-      id="doubleAngleButton"
-    >
-      <img src={doubleangleLeft} alt="" class="filter-green" />
-    </button>
+    <Loader loaderMessage="Loading collections..." loaderSize="large" />
   </div>
-
+  <script>
+    console.log("Rendering loader - isLoading is true");
+  </script>
+{:else}
+  <script>
+    console.log("Rendering collection list - isLoading is false");
+  </script>
+  <!-- Your existing collection list UI -->
   <div
-    tabindex="0"
-    class="collection-container d-flex align-items-center py-2 pe-2 border-radius-2"
-    style="cursor:pointer; justify-content: space-between; height:32px; margin-bottom:0;"
-    on:mouseover={handleMouseOver}
-    on:mouseout={handleMouseOut}
+    style="height:100%; overflow:hidden"
+    class={`sidebar d-flex flex-column scroll px-1`}
+    id="collection-container"
   >
     <div
-      class=" d-flex align-items-center"
-      style="width: calc(100% - 30px);  padding: 4px 2px; height:32px; "
-      bind:this={collectionTabWrapper}
-      on:click={() => {
-        toggleExpandCollection();
-        handleTabUpdate("collection");
-      }}
+      class="d-flex justify-content-between align-items-center align-self-stretch px-0 pt-3 d-none"
     >
-      <span style=" display: flex; margin-right:4px;">
-        <Button
-          size="extra-small"
-          type="teritiary-regular"
-          customWidth="24px"
-          startIcon={!$isExpandCollection
-            ? ChevronRightRegular
-            : ChevronDownRegular}
-        />
-      </span>
-
-      <span
-        style="display: flex; align-items:center; justify-content:end; height:24px; width:30px; padding:4px; "
+      <p class="mb-0 text-whiteColor ellipsis text-fs-16">
+        {$currentWorkspace?.name || ""}
+      </p>
+      <button
+        class=" border-0 rounded px-2 angleButton"
+        on:click={() => {
+          leftPanelController.leftPanelCollapse =
+            !leftPanelController.leftPanelCollapse;
+          leftPanelController.handleCollapseCollectionList();
+        }}
+        id="doubleAngleButton"
       >
-        <StackRegular size="16px" color="var(--bg-ds-neutral-300)" />
-      </span>
-      <span
-        style="display: flex; height:24px; gap:4px; align-items:center; padding:2px 4px; "
-      >
-        <p
-          class="text-ds-font-size-12 text-ds-line-height-130 text-ds-font-weight-medium mb-0"
-          style=" color:var(--text-ds-neutral-50); "
-        >
-          Collections
-        </p>
-      </span>
+        <img src={doubleangleLeft} alt="" class="filter-green" />
+      </button>
     </div>
 
-    {#if userRole !== WorkspaceRole.WORKSPACE_VIEWER && !activeWorkspace?.isShared}
-      {#if isGuestUser}
-        <span style="display:flex;" class="add-icon-container">
+    <div
+      tabindex="0"
+      class="collection-container d-flex align-items-center py-2 pe-2 border-radius-2"
+      style="cursor:pointer; justify-content: space-between; height:32px; margin-bottom:0;"
+      on:mouseover={handleMouseOver}
+      on:mouseout={handleMouseOut}
+    >
+      <div
+        class=" d-flex align-items-center"
+        style="width: calc(100% - 30px);  padding: 4px 2px; height:32px; "
+        bind:this={collectionTabWrapper}
+        on:click={() => {
+          toggleExpandCollection();
+          handleTabUpdate("collection");
+        }}
+      >
+        <span style=" display: flex; margin-right:4px;">
           <Button
-            id="add-collection-type"
             size="extra-small"
-            customWidth={"24px"}
             type="teritiary-regular"
-            startIcon={AddRegular}
-            disable={userRole === WorkspaceRole.WORKSPACE_VIEWER}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isGuestUser) {
-                onItemCreated("collection", {
-                  workspaceId: currentWorkspaceId,
-                  collection: collectionList,
-                });
-              } else {
-                showImportCollectionPopup();
-              }
-              isExpandCollection.set(true);
-            }}
+            customWidth="24px"
+            startIcon={!$isExpandCollection
+              ? ChevronRightRegular
+              : ChevronDownRegular}
           />
         </span>
-      {:else}
-        <Tooltip
-          title={"Add Options"}
-          placement={"top-center"}
-          distance={13}
-          show={!showAddItemMenu}
-          zIndex={701}
+
+        <span
+          style="display: flex; align-items:center; justify-content:end; height:24px; width:30px; padding:4px; "
         >
+          <StackRegular size="16px" color="var(--bg-ds-neutral-300)" />
+        </span>
+        <span
+          style="display: flex; height:24px; gap:4px; align-items:center; padding:2px 4px; "
+        >
+          <p
+            class="text-ds-font-size-12 text-ds-line-height-130 text-ds-font-weight-medium mb-0"
+            style=" color:var(--text-ds-neutral-50); "
+          >
+            Collections
+          </p>
+        </span>
+      </div>
+
+      {#if userRole !== WorkspaceRole.WORKSPACE_VIEWER && !activeWorkspace?.isShared}
+        {#if isGuestUser}
           <span style="display:flex;" class="add-icon-container">
             <Button
               id="add-collection-type"
@@ -642,216 +659,146 @@
               startIcon={AddRegular}
               disable={userRole === WorkspaceRole.WORKSPACE_VIEWER}
               onClick={(e) => {
-                rightClickContextMenu(e);
+                e.stopPropagation();
+                if (isGuestUser) {
+                  onItemCreated("collection", {
+                    workspaceId: currentWorkspaceId,
+                    collection: collectionList,
+                  });
+                } else {
+                  showImportCollectionPopup();
+                }
+                isExpandCollection.set(true);
               }}
             />
           </span>
-        </Tooltip>
-      {/if}
-    {/if}
-  </div>
-
-  {#if $isExpandCollection}
-    <div
-      class="overflow-auto position-relative d-flex flex-column me-0"
-      style={` background-color: ${ActiveTab === "collection" ? "var(--bg-ds-surface-600)" : "transparent"};`}
-    >
-      {#if (standardFlatItems?.length > 0 || mockFlatItems?.length > 0) && searchData.length === 0}
-        <div
-          class="box-line"
-          style="background-color: {isExpandCollectionLine
-            ? 'var(--bg-ds-neutral-500)'
-            : 'var(--bg-ds-surface-100)'}"
-        ></div>
-      {/if}
-      {#if standardFlatItems?.length > 0 || mockFlatItems?.length > 0}
-        <div bind:this={virtualScrollEl} style="height: 100%;">
-          <VirtualScroll
-            data={[...standardFlatItems, ...mockFlatItems]}
-            key="virtualId"
-            let:data
+        {:else}
+          <Tooltip
+            title={"Add Options"}
+            placement={"top-center"}
+            distance={13}
+            show={!showAddItemMenu}
+            zIndex={701}
           >
-            <div slot="header" class="ps-4">
-              {#if !standardFlatItems?.length && !searchData}
-                <EmptyCollection
-                  bind:userRole
-                  {onItemCreated}
-                  {collectionList}
-                  {userRoleInWorkspace}
-                  {currentWorkspace}
-                  handleCreateApiRequest={() => onItemCreated("request", {})}
-                  onImportCollectionPopup={showImportCollectionPopup}
-                  isAddCollectionDisabled={isGuestUser}
-                  onImportCurlPopup={showImportCurlPopup}
-                  {isGuestUser}
-                />
-                <hr style="margin: 0.5rem;" />
-              {/if}
-            </div>
-            <div slot="footer" class="ps-4">
-              {#if !mockFlatItems?.length && !isGuestUser && !searchData}
-                <hr style="margin: 0.5rem;" />
-                <EmptyCollection
-                  bind:userRole
-                  isMockCollection={true}
-                  {onItemCreated}
-                  {collectionList}
-                  {userRoleInWorkspace}
-                  {currentWorkspace}
-                  handleCreateApiRequest={() => onItemCreated("request", {})}
-                  onImportCollectionPopup={showImportCollectionPopup}
-                  isAddCollectionDisabled={isGuestUser}
-                  onImportCurlPopup={showImportCurlPopup}
-                  {isGuestUser}
-                />
-              {/if}
-            </div>
-            <div class="item-container">
-              {#each Array(data.depth).fill(0) as _, i}
-                <div
-                  class="indent-line"
-                  style="background-color: var(--bg-ds-neutral-700); left: {i ===
-                  0
-                    ? 27
-                    : i === 1
-                      ? 42
-                      : i === 2
-                        ? 55
-                        : 80}px"
-                ></div>
-              {/each}
+            <span style="display:flex;" class="add-icon-container">
+              <Button
+                id="add-collection-type"
+                size="extra-small"
+                customWidth={"24px"}
+                type="teritiary-regular"
+                startIcon={AddRegular}
+                disable={userRole === WorkspaceRole.WORKSPACE_VIEWER}
+                onClick={(e) => {
+                  rightClickContextMenu(e);
+                }}
+              />
+            </span>
+          </Tooltip>
+        {/if}
+      {/if}
+    </div>
 
-              {#if data.type === "COLLECTION"}
-                <Collection
-                  isMockCollection={data.data.collectionType ===
-                  CollectionTypeBaseEnum.MOCK
-                    ? true
-                    : false}
-                  bind:userRole
-                  {isSharedWorkspace}
-                  {onItemCreated}
-                  {onItemDeleted}
-                  {onItemRenamed}
-                  {onItemOpened}
-                  {onBranchSwitched}
-                  {onRefetchCollection}
-                  {userRoleInWorkspace}
-                  {activeTabPath}
-                  {activeTabType}
-                  collection={data.data}
-                  {activeTabId}
-                  bind:isFirstCollectionExpand
-                  {isWebApp}
-                  {searchData}
-                  {onCompareCollection}
-                  {onSyncCollection}
-                  {onUpdateRunningState}
-                  {onCreateMockCollection}
-                  {isGuestUser}
-                  visibility={data.expand}
-                />
-              {:else if data.type === CollectionItemTypeBaseEnum.REQUEST}
-                <Request
-                  {userRole}
-                  {isSharedWorkspace}
-                  api={data.data}
-                  {onItemRenamed}
-                  {onItemDeleted}
-                  {onItemOpened}
-                  {activeTabPath}
-                  {searchData}
-                  {activeTabType}
-                  folder={data?.parentFolder?.id
-                    ? {
-                        id: data.parentFolder.id,
-                        name: data.parentFolder.name,
-                      }
-                    : null}
-                  collection={{
-                    id: data.parentCollection.id,
-                    name: data.parentCollection.name,
-                    workspaceId: data.parentCollection.workspaceId,
-                    activeSync: data.parentCollection.activeSync,
-                  }}
-                  {activeTabId}
-                  {isWebApp}
-                  expand={data.expand}
-                />
-              {:else if data.type === CollectionItemTypeBaseEnum.WEBSOCKET}
-                <div style="cursor:pointer;">
-                  <WebSocket
-                    {userRole}
-                    {isSharedWorkspace}
-                    api={data.data}
-                    {onItemRenamed}
-                    {onItemDeleted}
-                    {onItemOpened}
-                    folder={data?.parentFolder?.id
-                      ? {
-                          id: data.parentFolder.id,
-                          name: data.parentFolder.name,
-                        }
-                      : null}
-                    collection={{
-                      id: data.parentCollection.id,
-                      name: data.parentCollection.name,
-                      workspaceId: data.parentCollection.workspaceId,
-                      activeSync: data.parentCollection.activeSync,
-                    }}
-                    {activeTabId}
+    {#if $isExpandCollection}
+      <div
+        class="overflow-auto position-relative d-flex flex-column me-0"
+        style={` background-color: ${ActiveTab === "collection" ? "var(--bg-ds-surface-600)" : "transparent"};`}
+      >
+        {#if (standardFlatItems?.length > 0 || mockFlatItems?.length > 0) && searchData.length === 0}
+          <div
+            class="box-line"
+            style="background-color: {isExpandCollectionLine
+              ? 'var(--bg-ds-neutral-500)'
+              : 'var(--bg-ds-surface-100)'}"
+          ></div>
+        {/if}
+        {#if standardFlatItems?.length > 0 || mockFlatItems?.length > 0}
+          <div bind:this={virtualScrollEl} style="height: 100%;">
+            <VirtualScroll
+              data={[...standardFlatItems, ...mockFlatItems]}
+              key="virtualId"
+              let:data
+            >
+              <div slot="header" class="ps-4">
+                {#if !standardFlatItems?.length && !searchData}
+                  <EmptyCollection
+                    bind:userRole
+                    {onItemCreated}
+                    {collectionList}
+                    {userRoleInWorkspace}
+                    {currentWorkspace}
+                    handleCreateApiRequest={() => onItemCreated("request", {})}
+                    onImportCollectionPopup={showImportCollectionPopup}
+                    isAddCollectionDisabled={isGuestUser}
+                    onImportCurlPopup={showImportCurlPopup}
+                    {isGuestUser}
                   />
-                </div>
-              {:else if data.type === CollectionItemTypeBaseEnum.SOCKETIO}
-                <div style="cursor:pointer;">
-                  <SocketIo
-                    {userRole}
-                    {isSharedWorkspace}
-                    socketIo={data.data}
-                    {onItemRenamed}
-                    {onItemDeleted}
-                    {onItemOpened}
-                    folder={data?.parentFolder?.id
-                      ? {
-                          id: data.parentFolder.id,
-                          name: data.parentFolder.name,
-                        }
-                      : null}
-                    collection={{
-                      id: data.parentCollection.id,
-                      name: data.parentCollection.name,
-                      workspaceId: data.parentCollection.workspaceId,
-                      activeSync: data.parentCollection.activeSync,
-                    }}
-                    {activeTabId}
+                  <hr style="margin: 0.5rem;" />
+                {/if}
+              </div>
+              <div slot="footer" class="ps-4">
+                {#if !mockFlatItems?.length && !isGuestUser && !searchData}
+                  <hr style="margin: 0.5rem;" />
+                  <EmptyCollection
+                    bind:userRole
+                    isMockCollection={true}
+                    {onItemCreated}
+                    {collectionList}
+                    {userRoleInWorkspace}
+                    {currentWorkspace}
+                    handleCreateApiRequest={() => onItemCreated("request", {})}
+                    onImportCollectionPopup={showImportCollectionPopup}
+                    isAddCollectionDisabled={isGuestUser}
+                    onImportCurlPopup={showImportCurlPopup}
+                    {isGuestUser}
                   />
-                </div>
-              {:else if data.type === CollectionItemTypeBaseEnum.GRAPHQL}
-                <div style="cursor:pointer;">
-                  <Graphql
-                    {userRole}
+                {/if}
+              </div>
+              <div class="item-container">
+                {#each Array(data.depth).fill(0) as _, i}
+                  <div
+                    class="indent-line"
+                    style="background-color: var(--bg-ds-neutral-700); left: {i ===
+                    0
+                      ? 27
+                      : i === 1
+                        ? 42
+                        : i === 2
+                          ? 55
+                          : 80}px"
+                  ></div>
+                {/each}
+
+                {#if data.type === "COLLECTION"}
+                  <Collection
+                    isMockCollection={data.data.collectionType ===
+                    CollectionTypeBaseEnum.MOCK
+                      ? true
+                      : false}
+                    bind:userRole
                     {isSharedWorkspace}
-                    graphql={data.data}
-                    {onItemRenamed}
+                    {onItemCreated}
                     {onItemDeleted}
+                    {onItemRenamed}
                     {onItemOpened}
-                    folder={data?.parentFolder?.id
-                      ? {
-                          id: data.parentFolder.id,
-                          name: data.parentFolder.name,
-                        }
-                      : null}
-                    collection={{
-                      id: data.parentCollection.id,
-                      name: data.parentCollection.name,
-                      workspaceId: data.parentCollection.workspaceId,
-                      activeSync: data.parentCollection.activeSync,
-                    }}
+                    {onBranchSwitched}
+                    {onRefetchCollection}
+                    {userRoleInWorkspace}
+                    {activeTabPath}
+                    {activeTabType}
+                    collection={data.data}
                     {activeTabId}
+                    bind:isFirstCollectionExpand
+                    {isWebApp}
+                    {searchData}
+                    {onCompareCollection}
+                    {onSyncCollection}
+                    {onUpdateRunningState}
+                    {onCreateMockCollection}
+                    {isGuestUser}
+                    visibility={data.expand}
                   />
-                </div>
-              {:else if data.type === CollectionItemTypeBaseEnum.MOCK_REQUEST}
-                <div style={`cursor: pointer; `}>
-                  <MockRequest
+                {:else if data.type === CollectionItemTypeBaseEnum.REQUEST}
+                  <Request
                     {userRole}
                     {isSharedWorkspace}
                     api={data.data}
@@ -875,47 +822,170 @@
                     }}
                     {activeTabId}
                     {isWebApp}
+                    expand={data.expand}
                   />
-                </div>
-              {:else if data.type === CollectionItemTypeBaseEnum.FOLDER}
-                <Folder
-                  isMockCollection={data.parentCollection.collectionType ===
-                  CollectionTypeBaseEnum.MOCK
-                    ? true
-                    : false}
-                  {userRole}
-                  {isSharedWorkspace}
-                  {onItemCreated}
-                  {onItemDeleted}
-                  {onItemRenamed}
-                  {onItemOpened}
-                  collection={{
-                    id: data.parentCollection.id,
-                    name: data.parentCollection.name,
-                    workspaceId: data.parentCollection.workspaceId,
-                    activeSync: data.parentCollection.activeSync,
-                  }}
-                  {userRoleInWorkspace}
-                  {activeTabPath}
-                  explorer={data.data}
-                  {activeTabType}
-                  {activeTabId}
-                  {searchData}
-                  {isWebApp}
-                  expand={data.expand}
-                />
-              {:else if data.type === CollectionItemTypeBaseEnum.AI_REQUEST}
-                <div style={`cursor: pointer; `}>
-                  <AiRequest
+                {:else if data.type === CollectionItemTypeBaseEnum.WEBSOCKET}
+                  <div style="cursor:pointer;">
+                    <WebSocket
+                      {userRole}
+                      {isSharedWorkspace}
+                      api={data.data}
+                      {onItemRenamed}
+                      {onItemDeleted}
+                      {onItemOpened}
+                      folder={data?.parentFolder?.id
+                        ? {
+                            id: data.parentFolder.id,
+                            name: data.parentFolder.name,
+                          }
+                        : null}
+                      collection={{
+                        id: data.parentCollection.id,
+                        name: data.parentCollection.name,
+                        workspaceId: data.parentCollection.workspaceId,
+                        activeSync: data.parentCollection.activeSync,
+                      }}
+                      {activeTabId}
+                    />
+                  </div>
+                {:else if data.type === CollectionItemTypeBaseEnum.SOCKETIO}
+                  <div style="cursor:pointer;">
+                    <SocketIo
+                      {userRole}
+                      {isSharedWorkspace}
+                      socketIo={data.data}
+                      {onItemRenamed}
+                      {onItemDeleted}
+                      {onItemOpened}
+                      folder={data?.parentFolder?.id
+                        ? {
+                            id: data.parentFolder.id,
+                            name: data.parentFolder.name,
+                          }
+                        : null}
+                      collection={{
+                        id: data.parentCollection.id,
+                        name: data.parentCollection.name,
+                        workspaceId: data.parentCollection.workspaceId,
+                        activeSync: data.parentCollection.activeSync,
+                      }}
+                      {activeTabId}
+                    />
+                  </div>
+                {:else if data.type === CollectionItemTypeBaseEnum.GRAPHQL}
+                  <div style="cursor:pointer;">
+                    <Graphql
+                      {userRole}
+                      {isSharedWorkspace}
+                      graphql={data.data}
+                      {onItemRenamed}
+                      {onItemDeleted}
+                      {onItemOpened}
+                      folder={data?.parentFolder?.id
+                        ? {
+                            id: data.parentFolder.id,
+                            name: data.parentFolder.name,
+                          }
+                        : null}
+                      collection={{
+                        id: data.parentCollection.id,
+                        name: data.parentCollection.name,
+                        workspaceId: data.parentCollection.workspaceId,
+                        activeSync: data.parentCollection.activeSync,
+                      }}
+                      {activeTabId}
+                    />
+                  </div>
+                {:else if data.type === CollectionItemTypeBaseEnum.MOCK_REQUEST}
+                  <div style={`cursor: pointer; `}>
+                    <MockRequest
+                      {userRole}
+                      {isSharedWorkspace}
+                      api={data.data}
+                      {onItemRenamed}
+                      {onItemDeleted}
+                      {onItemOpened}
+                      {activeTabPath}
+                      {searchData}
+                      {activeTabType}
+                      folder={data?.parentFolder?.id
+                        ? {
+                            id: data.parentFolder.id,
+                            name: data.parentFolder.name,
+                          }
+                        : null}
+                      collection={{
+                        id: data.parentCollection.id,
+                        name: data.parentCollection.name,
+                        workspaceId: data.parentCollection.workspaceId,
+                        activeSync: data.parentCollection.activeSync,
+                      }}
+                      {activeTabId}
+                      {isWebApp}
+                    />
+                  </div>
+                {:else if data.type === CollectionItemTypeBaseEnum.FOLDER}
+                  <Folder
+                    isMockCollection={data.parentCollection.collectionType ===
+                    CollectionTypeBaseEnum.MOCK
+                      ? true
+                      : false}
                     {userRole}
                     {isSharedWorkspace}
-                    aiRequest={data.data}
+                    {onItemCreated}
+                    {onItemDeleted}
+                    {onItemRenamed}
+                    {onItemOpened}
+                    collection={{
+                      id: data.parentCollection.id,
+                      name: data.parentCollection.name,
+                      workspaceId: data.parentCollection.workspaceId,
+                      activeSync: data.parentCollection.activeSync,
+                    }}
+                    {userRoleInWorkspace}
+                    {activeTabPath}
+                    explorer={data.data}
+                    {activeTabType}
+                    {activeTabId}
+                    {searchData}
+                    {isWebApp}
+                    expand={data.expand}
+                  />
+                {:else if data.type === CollectionItemTypeBaseEnum.AI_REQUEST}
+                  <div style={`cursor: pointer; `}>
+                    <AiRequest
+                      {userRole}
+                      {isSharedWorkspace}
+                      aiRequest={data.data}
+                      {onItemRenamed}
+                      {onItemDeleted}
+                      {onItemOpened}
+                      {activeTabPath}
+                      {searchData}
+                      {activeTabType}
+                      folder={data?.parentFolder?.id
+                        ? {
+                            id: data.parentFolder.id,
+                            name: data.parentFolder.name,
+                          }
+                        : null}
+                      collection={{
+                        id: data.parentCollection.id,
+                        name: data.parentCollection.name,
+                        workspaceId: data.parentCollection.workspaceId,
+                        activeSync: data.parentCollection.activeSync,
+                      }}
+                      {activeTabId}
+                      {isWebApp}
+                    />
+                  </div>
+                {:else if data.type === CollectionItemTypeBaseEnum.SAVED_REQUEST}
+                  <SavedRequest
+                    {userRole}
+                    api={data.data}
                     {onItemRenamed}
                     {onItemDeleted}
                     {onItemOpened}
-                    {activeTabPath}
-                    {searchData}
-                    {activeTabType}
                     folder={data?.parentFolder?.id
                       ? {
                           id: data.parentFolder.id,
@@ -928,103 +998,66 @@
                       workspaceId: data.parentCollection.workspaceId,
                       activeSync: data.parentCollection.activeSync,
                     }}
+                    request={{
+                      id: data.parentRequest.id,
+                      name: data.parentRequest.name,
+                    }}
                     {activeTabId}
-                    {isWebApp}
                   />
-                </div>
-              {:else if data.type === CollectionItemTypeBaseEnum.SAVED_REQUEST}
-                <SavedRequest
-                  {userRole}
-                  api={data.data}
-                  {onItemRenamed}
-                  {onItemDeleted}
-                  {onItemOpened}
-                  folder={data?.parentFolder?.id
-                    ? {
-                        id: data.parentFolder.id,
-                        name: data.parentFolder.name,
+                {:else if data.type === "COLLECTION-MANAGER"}
+                  <CollectionManager
+                    isMockCollection={data.data.collectionType ===
+                    CollectionTypeBaseEnum.MOCK
+                      ? true
+                      : false}
+                    bind:userRole
+                    {isSharedWorkspace}
+                    {onItemCreated}
+                    {userRoleInWorkspace}
+                    {activeTabPath}
+                    {activeTabType}
+                    collection={data.data}
+                    {activeTabId}
+                    bind:isFirstCollectionExpand
+                    {isWebApp}
+                    {searchData}
+                    {onCompareCollection}
+                    {onSyncCollection}
+                    {onUpdateRunningState}
+                    {onCreateMockCollection}
+                    {isGuestUser}
+                    visibility={data.expand}
+                  />
+                {:else}
+                  <button
+                    on:click={() => {
+                      if ($openedComponent.has(data.id)) {
+                        removeCollectionItem(data.id);
+                      } else {
+                        addCollectionItem(data.id, data.type);
                       }
-                    : null}
-                  collection={{
-                    id: data.parentCollection.id,
-                    name: data.parentCollection.name,
-                    workspaceId: data.parentCollection.workspaceId,
-                    activeSync: data.parentCollection.activeSync,
-                  }}
-                  request={{
-                    id: data.parentRequest.id,
-                    name: data.parentRequest.name,
-                  }}
-                  {activeTabId}
-                />
-              {:else if data.type === "COLLECTION-MANAGER"}
-                <CollectionManager
-                  isMockCollection={data.data.collectionType ===
-                  CollectionTypeBaseEnum.MOCK
-                    ? true
-                    : false}
-                  bind:userRole
-                  {isSharedWorkspace}
-                  {onItemCreated}
-                  {userRoleInWorkspace}
-                  {activeTabPath}
-                  {activeTabType}
-                  collection={data.data}
-                  {activeTabId}
-                  bind:isFirstCollectionExpand
-                  {isWebApp}
-                  {searchData}
-                  {onCompareCollection}
-                  {onSyncCollection}
-                  {onUpdateRunningState}
-                  {onCreateMockCollection}
-                  {isGuestUser}
-                  visibility={data.expand}
-                />
-              {:else}
-                <button
-                  on:click={() => {
-                    if ($openedComponent.has(data.id)) {
-                      removeCollectionItem(data.id);
-                    } else {
-                      addCollectionItem(data.id, data.type);
-                    }
-                  }}>{$openedComponent.has(data.id) ? "true" : "false"}</button
-                >
-                {data.name}
-                <span class="type">[{data.type}]</span>
-              {/if}
-            </div>
-          </VirtualScroll>
-        </div>
-      {:else if searchData}
-        <div class="pb-2 px-2 h-100 overflow-auto">
-          <p
-            class="mb-0 text-ds-font-size-12 text-ds-line-height-150 text-ds-font-weight-regular text-center"
-            style="color: var(--text-ds-neutral-400); letter-spacing: 0.5px;"
-          >
-            It seems we couldn't find the result matching your search query.
-          </p>
-        </div>
-      {:else}
-        <div class="pb-2 px-2 h-100 overflow-auto">
-          <EmptyCollection
-            bind:userRole
-            {onItemCreated}
-            {collectionList}
-            {userRoleInWorkspace}
-            {currentWorkspace}
-            handleCreateApiRequest={() => onItemCreated("request", {})}
-            onImportCollectionPopup={showImportCollectionPopup}
-            isAddCollectionDisabled={isGuestUser}
-            onImportCurlPopup={showImportCurlPopup}
-            {isGuestUser}
-          />
-          {#if !isGuestUser}
-            <hr style="margin: 0.5rem;" />
+                    }}
+                    >{$openedComponent.has(data.id) ? "true" : "false"}</button
+                  >
+                  {data.name}
+                  <span class="type">[{data.type}]</span>
+                {/if}
+              </div>
+            </VirtualScroll>
+          </div>
+        {:else if searchData}
+          <div class="pb-2 px-2 h-100 overflow-auto">
+            <p
+              class="mb-0 text-ds-font-size-12 text-ds-line-height-150 text-ds-font-weight-regular text-center"
+              style="color: var(--text-ds-neutral-400); letter-spacing: 0.5px;"
+            >
+              It seems we couldn't find the result matching your search query.
+            </p>
+          </div>
+        {:else}
+          <div class="pb-2 px-2 h-100 overflow-auto">
             <EmptyCollection
               bind:userRole
-              isMockCollection={true}
               {onItemCreated}
               {collectionList}
               {userRoleInWorkspace}
@@ -1035,14 +1068,39 @@
               onImportCurlPopup={showImportCurlPopup}
               {isGuestUser}
             />
-          {/if}
-        </div>
-      {/if}
-    </div>
-  {/if}
-</div>
+            {#if !isGuestUser}
+              <hr style="margin: 0.5rem;" />
+              <EmptyCollection
+                bind:userRole
+                isMockCollection={true}
+                {onItemCreated}
+                {collectionList}
+                {userRoleInWorkspace}
+                {currentWorkspace}
+                handleCreateApiRequest={() => onItemCreated("request", {})}
+                onImportCollectionPopup={showImportCollectionPopup}
+                isAddCollectionDisabled={isGuestUser}
+                onImportCurlPopup={showImportCurlPopup}
+                {isGuestUser}
+              />
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+{/if}
 
 <style>
+  .spinner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-ds-surface-100);
+  }
+
   .collection-container {
     background-color: transparent;
     margin-bottom: 2px;
